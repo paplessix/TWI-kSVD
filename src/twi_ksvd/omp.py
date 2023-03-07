@@ -21,7 +21,7 @@ def OMP(x, D, tau):
     D_Omega = []
 
     while len(Omega) < tau:
-        best_cos = -1.
+        best_cos = -1
         best_k = -1
         best_dk = -1.
 
