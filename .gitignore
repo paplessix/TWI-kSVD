@@ -1,5 +1,5 @@
 # Dataset folders
-./trajectory_dataset/*
+trajectory_dataset/*
 
 # Temporary and binary files
 *~
