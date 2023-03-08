@@ -73,7 +73,7 @@ def COSTW(x, y):
             flags[i, j] = best_flag
     
     costw = M[-1, -1]
-    delta = zeros((Tx, Ty))
+    delta = zeros((Tx, Ty), dtype=int)
     delta[-1, -1] = 1
 
     i, j = Tx - 1, Ty - 1
@@ -82,6 +82,7 @@ def COSTW(x, y):
         if flags[i,j] == 0:
             i, j = i-1, j-1
         elif flags[i,j] == 1:
+            delta[i,j] = 0
             j = j-1
         else:
             i = i-1
