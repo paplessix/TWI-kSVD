@@ -1,3 +1,6 @@
+# Dataset folders
+./trajectory_dataset/*
+
 # Temporary and binary files
 *~
 *.py[cod]
