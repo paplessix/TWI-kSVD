@@ -117,7 +117,7 @@ class TWI_kSVD():
                 for i, boolean in enumerate(Omega_k):
                     if boolean :
                         e_i = X[:,i] - np.sum([alignements[i][:,j]*self.D[:,j]*self.A[j,i] for j in np.arange(self.K)[mask]])
-                        rotated_res = self.rotation(alignements[i].T@e_i; alignements[i].T@alignements[k]D[:,k], D[:,k])
+                        rotated_res = self.rotation(alignements[i].T@e_i, alignements[i].T@alignements[k]*D[:,k], D[:,k])
                         residuals.append(rotated_res)
                 u, s, vh = np.linalg.svd(np.concatenate(residuals), full_matrices=True)
                 
