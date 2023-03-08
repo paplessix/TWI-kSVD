@@ -57,15 +57,15 @@ def TWI_OMP(x, D_list, tau):
 
     Inputs:
         - `x (p,)`:time series
-        - `D`: Dictionnary of K atoms (of length pi each)
+        - `D_list`: list of K atoms (of lengths pj) (the dictionnary of K atoms)
         - `tau`: Number of atoms chosen to represent `x` with atoms of `D`
     
     Returns:
         - `alpha (K,)`: learned coefficients
-        - `alignment (p, K)`: alignment[:,j] is the alignement of atom d_j
+        - `deltas`: a list of K binary matrixes of shape (p, pj) with pj the length of the j-th atom and p the length of x
 
     Use:
-        - The approximation of x is \sum_j=1^K alpha[j] * D[j][alignment[:,j]]
+        - The approximation of x is \sum_j=1^K alpha[j] * deltas[j] @ D_list[j]
     """
 
     K = len(D_list)
@@ -74,13 +74,13 @@ def TWI_OMP(x, D_list, tau):
     res = x
     Omega = []
     S_Omega = []
-    alignments = zeros((p, K), dtype=int)
+    deltas_partial = []
 
     while len(Omega) < tau:
         best_cos = -1.1
         best_k = -1
         best_dk = -1.
-        alignment = -1.
+        best_delta = -1.
 
         for j in range(K):
             if j in Omega:
@@ -88,14 +88,14 @@ def TWI_OMP(x, D_list, tau):
             cos_sim, delta = COSTW(res, D_list[j])
 
             if cos_sim > best_cos:
-                alignment = argmax(delta, axis=-1)
                 best_cos = cos_sim
                 best_k = j
-                best_dk = D_list[j][alignment]
+                best_delta = delta
+                best_dk = delta @ D_list[j]
         
         Omega.append(best_k)
         S_Omega.append(best_dk)
-        alignments[:, best_k] = alignment
+        deltas_partial.append(best_delta)
 
         D_partial = stack(S_Omega, axis=-1)
 
@@ -104,7 +104,23 @@ def TWI_OMP(x, D_list, tau):
         res = x - D_partial.reshape((p, len(Omega))) @ alpha_partial
 
     alpha = zeros(K)
+    deltas = []
 
     for i, k in enumerate(Omega):
+
+        while len(deltas) < k :
+            deltas.append(zeros((p, D_list[j].shape[0]), dtype=int))
+
         alpha[k] = alpha_partial[i]
-    return alpha, alignments
+
+        if len(deltas) == k:
+            deltas.append(deltas_partial[i])
+        else:
+            deltas[k] = deltas_partial[i]
+        
+    while len(deltas) < K:
+        deltas.append(zeros((p, D_list[j].shape[0]), dtype=int))
+        
+    print(len(deltas), K)
+    
+    return alpha, deltas
