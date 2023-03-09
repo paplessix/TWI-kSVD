@@ -98,26 +98,27 @@ class TWI_kSVD():
             print(f"iteration number : {n_iter}, eps : {abs(np.linalg.norm(E_k))}, delta_eps : {abs(np.linalg.norm(E_k) - np.linalg.norm(E_k_old))}")
             E_k_old = E_k  
             # init
-            alphas = []
-            alignements = []
+            self.alphas = []
+            self.alignements = []
 
             # Compute sparse codes 
 
             for i in range(self.N):
                 alpha, delta_ij= TWI_OMP(X[:,i],D,tau)
-                alphas.append(alpha)
-                alignements.append(delta_ij)
-            self.A = np.vstack(alphas).T            
+                self.alphas.append(alpha)
+                self.alignements.append(delta_ij)
+                       
             
             for k in range(self.K):
                 mask = np.ones(len(self.D[0]), dtype=bool)
                 mask[k] = False
-                Omega_k = self.A[k,:] != 0
+
+                Omega_k = self.alphas[k][:] != 0
                 residuals= []
-                for i, boolean in enumerate(Omega_k):
-                    if boolean :
-                        e_i = X[:,i] - np.sum([alignements[i][:,j]*self.D[:,j]*self.A[j,i] for j in np.arange(self.K)[mask]])
-                        rotated_res = self.rotation(alignements[i].T@e_i; alignements[i].T@alignements[k]D[:,k], D[:,k])
+
+                for i in Omega_k.nonzero():
+                        e_i = X[:,i] - np.sum([self.alignements[i]@self.D[:,j]*self.alphas[i,j] for j in np.arange(self.K)[mask]])
+                        rotated_res = self.rotation(self.alignements[i].T@e_i; self.alignements[i].T@self.alignements[k]D[:,k], self.D[:,k])
                         residuals.append(rotated_res)
                 u, s, vh = np.linalg.svd(np.concatenate(residuals), full_matrices=True)
                 
