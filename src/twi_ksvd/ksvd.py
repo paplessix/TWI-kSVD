@@ -5,21 +5,23 @@ from twi_ksvd.omp import OMP, TWI_OMP
 
 
 class kSVD():
-    """Implementation of the kSVD dictionnary learning method 
+    """Implementation of the kSVD dictionnary learning algorithm
     """
     def __init__(self, K = 10, epsilon  = 1e-3, max_iter = 30) -> None:
         self.K = K  #number of atoms 
         self.epsilon = epsilon
         self.max_iter = max_iter
 
-    def fit (self, X, D, tau):
+    def fit (self, X, D, tau:int):
         """Method that learns the dictionnary based on a set of data 
         Inputs: 
             - X (p,N) : input samples
             - D (p,K) : dictionnary of K atoms 
             - `tau`: Number of atoms chosen to represent `x` with atoms of `D`
 
-        Returns:         
+        Returns:
+            - A : learned alphas : np.array -> size (K,N)
+            - D : learned dictionnary : np.arrat -> shape (p,K)
         """
         self.D = D
         self.N  = len(X[0]) # number of input samples
@@ -69,16 +71,32 @@ class kSVD():
 
 
 class TWI_kSVD():
-    """
+    """_summary_
     """
     def __init__(self, K = 10, epsilon  = 1e-3, max_iter = 30) -> None:
+        """Init the TWI-kSVD algorithm 
+
+        Args:
+            K (int, optional): Number of atoms . Defaults to 10.
+            epsilon (_type_, optional): Precision level. Defaults to 1e-3.
+            max_iter (int, optional): Maximum number of iterations. Defaults to 30.
         """
-        """
+
         self.K = K  #number of atoms 
         self.epsilon = epsilon  # precision
         self.max_iter = max_iter # max number of iterations
 
-    def rotation(self,a,b,c):
+    def rotation(self,a:np.array,b:np.array,c:np.array) -> np.array:
+        """Method that implement the rotation of vectors
+
+        Args:
+            a (np.array): _description_
+            b (np.array): _description_
+            c (np.array): _description_
+
+        Returns:
+            np.array: Rotated vector
+        """
         theta =  np.arccos(np.clip(np.dot(b/np.linalg.norm(b), c/np.linalg.norm(c)), -1.0, 1.0))
         u = b / np.linalg.norm(b)
         v = (c- np.dot(u,c)*u)/np.linalg.norm((c- np.dot(u,c)*u))
@@ -88,7 +106,15 @@ class TWI_kSVD():
         return R@a
     
     def fit (self, X, D, tau):
-        """
+        """Method that learn the dictionnary using the TWI-kSVD algorihtm
+
+        Args:
+            X (_type_): _description_
+            D (_type_): _description_
+            tau (_type_): _description_
+
+        Returns:
+            _type_: _description_
         """
         self.D = D
         self.N  = len(X[0]) # number of input samples
