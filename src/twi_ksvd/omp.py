@@ -85,6 +85,7 @@ def TWI_OMP(x, D_list, tau):
         for j in range(K):
             if j in Omega:
                 continue
+            print("         Run COSTW")
             cos_sim, delta = COSTW(res, D_list[j])
 
             if cos_sim > best_cos:
@@ -99,7 +100,7 @@ def TWI_OMP(x, D_list, tau):
 
         D_partial = stack(S_Omega, axis=-1)
 
-        alpha_partial = lstsq(D_partial, x)[0]
+        alpha_partial = lstsq(D_partial, x, rcond=None)[0]
 
         res = x - D_partial.reshape((p, len(Omega))) @ alpha_partial
 
@@ -121,6 +122,6 @@ def TWI_OMP(x, D_list, tau):
     while len(deltas) < K:
         deltas.append(zeros((p, D_list[j].shape[0]), dtype=int))
         
-    print(len(deltas), K)
+    # print(len(deltas), K)
     
     return alpha, deltas
