@@ -85,7 +85,6 @@ def TWI_OMP(x, D_list, tau):
         for j in range(K):
             if j in Omega:
                 continue
-            print("         Run COSTW")
             cos_sim, delta = COSTW(res, D_list[j])
 
             if cos_sim > best_cos:
