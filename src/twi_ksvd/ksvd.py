@@ -183,11 +183,14 @@ class TWI_kSVD():
                 n_iter +=1
         return self.alphas, self.D
     
+    def reconstruct_fit(self):
+        return np.array([np.sum([self.alignements[i][j]@self.D[j,:]*self.alphas[j,i] for j in np.arange(self.K)]) for i in range(self.N)])
+    
 
 if __name__ == '__main__':
     model = TWI_kSVD( 10)
-    X = np.random.random((2048,4))
-    D = np.random.random((2048,10)).T
+    X = np.random.random((100,4))
+    D = np.random.random((100,10)).T
     tau = 3
     model. fit(X,D,tau )
     print("tip")
