@@ -105,7 +105,7 @@ class TWI_kSVD():
         R = np.eye(len(u)) - np.outer(u,u) - np.outer(v,v) + np.vstack((u,v)).T@R_theta@np.vstack((u,v))
         return R@a
     
-    def fit (self, X, D, tau):
+    def fit (self, X, D, tau, r_window=None):
         """Method that learn the dictionnary using the TWI-kSVD algorihtm
 
         Args:
@@ -117,7 +117,8 @@ class TWI_kSVD():
             _type_: _description_
         """
         self.D = D
-        self.N  = len(X[0]) # number of input samples
+        assert len(D) == self.K
+        self.N  = len(X) # number of input samples
         # Initialize values 
 
         E_old = 0 
@@ -134,42 +135,44 @@ class TWI_kSVD():
             # Compute sparse codes 
 
             for i in tqdm(range(self.N)):
-                alpha, delta_ij= TWI_OMP(X[:,i],D,tau)
+                alpha, delta_ij= TWI_OMP(X[i],D,tau, r_window=r_window)
                 self.alphas.append(alpha)
                 self.alignements.append(delta_ij)
-            self.siblings_atoms = [ [self.alignements[i][k]@self.D[k,:] for k in range(self.K)] for i in range(self.N)]
-            self.alphas = np.vstack(self.alphas).T
-            # print(self.alphas.shape)
+            self.siblings_atoms = [ [np.zeros(len(X[i])) if self.alphas[i][k] == 0 else self.alignements[i][k]@self.D[k] for k in range(self.K)] for i in range(self.N)]
+            self.alphas = np.vstack(self.alphas)
+            #print(self.alphas.shape)
 
             # Compute error
-            E = np.array([ X[:,i] - np.sum([self.alignements[i][j]@self.D[j,:]*self.alphas[j,i] for j in np.arange(self.K)]) for i in range(self.N)])
-            print(E.shape)
+            E = np.sum([ np.linalg.norm(X[i] - np.sum([self.alphas[i][j] * self.siblings_atoms[i][j] for j in np.arange(self.K)])) for i in range(self.N)])
+            #print(E.shape)
             print("     Step 2 | Update Dictionnary")
             # Update dictionnary
             for k in range(self.K):
                 mask = np.ones(self.K, dtype=bool)
                 mask[k] = False
-                Omega_k = self.alphas[k,:] != 0
+                Omega_k = self.alphas[:,k] != 0
+
+                #print(Omega_k)
 
                 rotated_residuals= []
                 residuals = []
                 # print(Omega_k.nonzero()[0])
                 for i in Omega_k.nonzero()[0]:
-                        e_i = X[:,i] - np.sum([self.alignements[i][j]@self.D[j,:]*self.alphas[j,i] for j in np.arange(self.K)[mask]])
+                        e_i = X[i] - np.sum([self.alphas[i][j] * self.siblings_atoms[i][j] for j in np.arange(self.K)[mask]])
                         residuals.append(e_i)
-                        rotated_res = self.rotation(self.alignements[i][k].T@e_i, self.alignements[i][k].T@self.siblings_atoms[i][k], self.D[k,:])
+                        rotated_res = self.rotation(self.alignements[i][k].T@e_i, self.alignements[i][k].T@self.siblings_atoms[i][k], self.D[k])
                         # print(rotated_res.shape)
                         rotated_residuals.append(rotated_res)
                 if sum(Omega_k) >= 2 :
                     u, s, vh = np.linalg.svd(np.vstack(rotated_residuals).T, full_matrices=True)
                     
                     #  Update values 
-                    self.D[k,:] = u[0] 
+                    self.D[k] = u[0] 
                     
                     for index, i in  enumerate(Omega_k.nonzero()[0]):
-                        inv_rot_u = self.alignements[i][k]@self.rotation(u[0], self.D[k,:],self.alignements[i][k].T@ self.siblings_atoms[i][k])
+                        inv_rot_u = self.alignements[i][k]@self.rotation(u[0], self.D[k],self.alignements[i][k].T@ self.siblings_atoms[i][k])
                         self.siblings_atoms[i][k] = inv_rot_u
-                        self.alphas[k,i] = np.dot(residuals[index], inv_rot_u)/np.linalg.norm(inv_rot_u)
+                        self.alphas[i,k] = np.dot(residuals[index], inv_rot_u)/np.linalg.norm(inv_rot_u)
                 
 
             
@@ -184,7 +187,7 @@ class TWI_kSVD():
         return self.alphas, self.D
     
     def reconstruct_fit(self):
-        return np.array([np.sum([self.alignements[i][j]@self.D[j,:]*self.alphas[j,i] for j in np.arange(self.K)]) for i in range(self.N)])
+        return np.array([np.sum([self.alignements[i][j]@self.D[j]*self.alphas[i,j] for j in np.arange(self.K)]) for i in range(self.N)])
     
 
 if __name__ == '__main__':
