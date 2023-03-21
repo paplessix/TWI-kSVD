@@ -51,7 +51,7 @@ def OMP(x, D, tau):
         alpha[k] = alpha_partial[i]
     return alpha
 
-def TWI_OMP(x, D_list, tau):
+def TWI_OMP(x, D_list, tau, r_window = None):
     """
     Implementation of  Time Warping Invariant - Orthogonal Matching Pursuit (TWI-OMP) algorithm
 
@@ -85,7 +85,7 @@ def TWI_OMP(x, D_list, tau):
         for j in range(K):
             if j in Omega:
                 continue
-            cos_sim, delta = COSTW(res, D_list[j])
+            cos_sim, delta = COSTW(res, D_list[j], r_window=r_window)
 
             if cos_sim > best_cos:
                 best_cos = cos_sim
@@ -109,7 +109,7 @@ def TWI_OMP(x, D_list, tau):
     for i, k in enumerate(Omega):
 
         while len(deltas) < k :
-            deltas.append(zeros((p, D_list[j].shape[0]), dtype=int))
+            deltas.append(0)
 
         alpha[k] = alpha_partial[i]
 
@@ -119,7 +119,7 @@ def TWI_OMP(x, D_list, tau):
             deltas[k] = deltas_partial[i]
         
     while len(deltas) < K:
-        deltas.append(zeros((p, D_list[j].shape[0]), dtype=int))
+        deltas.append(0)
         
     # print(len(deltas), K)
     
