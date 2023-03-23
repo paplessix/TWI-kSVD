@@ -99,7 +99,7 @@ class TWI_kSVD():
         Returns:
             aR (np.array): Rotated vector such that (ar, c) = (a, b) 
         """
-        theta =  np.arccos(np.dot(b/np.linalg.norm(b), c/np.linalg.norm(c))) # np.arccos(np.clip(np.dot(b/np.linalg.norm(b), c/np.linalg.norm(c)), -1.0, 1.0))
+        theta = np.arccos(np.clip(np.dot(b/np.linalg.norm(b), c/np.linalg.norm(c)), -1.0, 1.0))
         u = b / np.linalg.norm(b)
         v = (c- np.dot(u,c)*u)/np.linalg.norm((c- np.dot(u,c)*u))
         c, s = np.cos(theta), np.sin(theta)
