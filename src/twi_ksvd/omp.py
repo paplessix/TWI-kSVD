@@ -1,5 +1,5 @@
 from numpy import argmax, dot, stack, zeros
-from numpy.linalg import norm, lstsq
+from numpy.linalg import norm, lstsq, inv
 from twi_ksvd.costw import COSTW
 
 
@@ -68,40 +68,46 @@ def TWI_OMP(x, D_list, tau, r_window = None):
         - The approximation of x is \sum_j=1^K alpha[j] * deltas[j] @ D_list[j]
     """
 
-    K = len(D_list)
-    p = x.shape[0]
+    K = len(D_list) # Number of atoms
 
-    res = x
-    Omega = []
-    S_Omega = []
-    deltas_partial = []
 
-    while len(Omega) < tau:
+    p = x.shape[0] # len of signal x
+
+    # Initialize 
+
+    res = x # residual to be decomposed 
+    Omega = [] # list of index that have been selected
+    S_Omega = [] # list of warped atoms 
+    deltas_partial = [] # TODO
+
+    while len(Omega) < tau: # While we have not met sparcity condition
+        
         best_cos = -1.1
         best_k = -1
         best_dk = -1.
         best_delta = -1.
 
-        for j in range(K):
-            if j in Omega:
+        for j in range(K): # for all atoms
+            if j in Omega: # if already out 
                 continue
-            cos_sim, delta = COSTW(res, D_list[j], r_window=r_window)
+            cos_sim, delta = COSTW(res, D_list[j], r_window=r_window) # Compute COSTW distance
 
-            if cos_sim > best_cos:
-                best_cos = cos_sim
+            if cos_sim > best_cos: # Store best atom
+                best_cos = cos_sim 
                 best_k = j
                 best_delta = delta
                 best_dk = delta @ D_list[j]
         
-        Omega.append(best_k)
-        S_Omega.append(best_dk)
-        deltas_partial.append(best_delta)
+
+        Omega.append(best_k) # Add best index
+        S_Omega.append(best_dk) # Store best warped atom 
+        deltas_partial.append(best_delta) # Store corresponding time-Warp
 
         D_partial = stack(S_Omega, axis=-1)
 
-        alpha_partial = lstsq(D_partial, x, rcond=None)[0]
+        alpha_partial = inv(D_partial.T@D_partial)@D_partial.T@x
 
-        res = x - D_partial.reshape((p, len(Omega))) @ alpha_partial
+        res = x - D_partial @ alpha_partial
 
     alpha = zeros(K)
     deltas = []
