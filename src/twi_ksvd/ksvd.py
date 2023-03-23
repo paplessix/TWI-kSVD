@@ -149,7 +149,7 @@ class TWI_kSVD():
             #print(self.alphas.shape)
 
             # Compute error
-            E = np.sum([ np.linalg.norm(X[i] - np.sum([self.alphas[i][j] * self.siblings_atoms[i][j] for j in np.arange(self.K) if self.alphas[i][j] != 0])) for i in range(self.N)])
+            E = np.sum([ np.linalg.norm(X[i] - np.sum([self.alphas[i][j] * self.siblings_atoms[i][j] for j in np.arange(self.K) if self.alphas[i][j] != 0], axis=0)) for i in range(self.N)])
             
             print(f"iteration number : {n_iter}, eps : {abs(np.linalg.norm(E)):.2e}, delta_eps : {abs(np.linalg.norm(E) - np.linalg.norm(E_old)):.2e}\n")
             #print(E.shape)
@@ -167,7 +167,9 @@ class TWI_kSVD():
                 # print(Omega_k.nonzero()[0])
                 for i in Omega_k.nonzero()[0]:
                     # Residuals w/o sibling atom k
-                    e_i = X[i] - np.sum([self.alphas[i][j] * self.siblings_atoms[i][j] for j in np.arange(self.K)[mask] if self.alphas[i][j] != 0])
+                    reconstruction = np.sum([self.alphas[i][j] * self.siblings_atoms[i][j] for j in np.arange(self.K)[mask] if self.alphas[i][j] != 0], axis=0)
+                    assert X[i].shape == reconstruction.shape, f"Reconstruction shape error {X[i].shape} != {reconstruction.shape}"
+                    e_i = X[i] - reconstruction
                     residuals.append(e_i)
 
                     # Rotated residual w.r.t. sibling atom d_k^si and d_k
