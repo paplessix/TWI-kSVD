@@ -104,23 +104,11 @@ def TWI_OMP(x, D_list, tau, r_window = None):
         res = x - D_partial.reshape((p, len(Omega))) @ alpha_partial
 
     alpha = zeros(K)
-    deltas = []
+    deltas = [0]*K
 
     for i, k in enumerate(Omega):
 
-        while len(deltas) < k :
-            deltas.append(0)
-
         alpha[k] = alpha_partial[i]
-
-        if len(deltas) == k:
-            deltas.append(deltas_partial[i])
-        else:
-            deltas[k] = deltas_partial[i]
-        
-    while len(deltas) < K:
-        deltas.append(0)
-        
-    # print(len(deltas), K)
+        deltas[k] = deltas_partial[i]
     
     return alpha, deltas
