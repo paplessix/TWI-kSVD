@@ -50,9 +50,9 @@ class kSVD():
             for k in range(self.K):
                 mask = np.ones(len(self.D[0]), dtype=bool)
                 mask[k] = False
-                # E_k = X - np.einsum('ij,jk->ik',self.D[:,mask], self.A[mask,:]) #TODO: Check if it is really doing what it needs to do 
+                E_k = X - np.einsum('ij,jk->ik',self.D[:,mask], self.A[mask,:]) #TODO: Check if it is really doing what it needs to do 
                 
-                E_k = X - self.D[:,mask]@ self.A[mask,:]
+                # E_k = X - np.sum([np.outer(self.D[:,j],self.A[j,:])for j in np.arange(self.K)[mask]])
                 Omega_k = self.A[k,:] != 0
                 # print(Omega_k.shape)
                 if sum(Omega_k) != 0 :
