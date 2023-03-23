@@ -178,11 +178,13 @@ class TWI_kSVD():
 
                 if sum(Omega_k) >= 2 :
                     u, _, _ = np.linalg.svd(np.vstack(Ek_phi).T, full_matrices=True)
-                    u1 = u[0]
+                    u1 = u[:,0]
                 elif sum(Omega_k) == 1:
                     u1 = Ek_phi[0] / np.linalg.norm(Ek_phi[0])
                 else:
                     continue
+            
+                assert u1.shape == self.D[k].shape, f"New atom with different length {u1.shape} != {self.D[k].shape}"
 
                 for index, i in  enumerate(Omega_k.nonzero()[0]):
                     inv_rot_u = self.alignements[i][k]@self.rotation(u1, self.D[k],self.alignements[i][k].T@ self.siblings_atoms[i][k])
