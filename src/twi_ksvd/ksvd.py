@@ -3,6 +3,8 @@ import numpy as np
 from tqdm import tqdm 
 from twi_ksvd.omp import OMP, TWI_OMP
 
+from multiprocessing import Pool
+
 
 class kSVD():
     """Implementation of the kSVD dictionnary learning algorithm
@@ -126,7 +128,6 @@ class TWI_kSVD():
         n_iter = 0
         while abs(np.linalg.norm(E) - np.linalg.norm(E_old)) > self.epsilon: # Stopping Criterion
             print("=============================================")
-            print(f"iteration number : {n_iter}, eps : {abs(np.linalg.norm(E))}, delta_eps : {abs(np.linalg.norm(E) - np.linalg.norm(E_old))}")
             E_old = E  
             # init
             self.alphas = []
@@ -134,16 +135,23 @@ class TWI_kSVD():
             print("     Step 1 | Compute Sparse Codes")
             # Compute sparse codes 
 
-            for i in tqdm(range(self.N)):
-                alpha, delta_ij= TWI_OMP(X[i],D,tau, r_window=r_window)
-                self.alphas.append(alpha)
-                self.alignements.append(delta_ij)
+            # print("Launching async processes")
+            with Pool(processes=None) as pool:
+                multiple_results = [pool.apply_async(TWI_OMP, (X[i],D,tau, r_window)) for i in range(self.N)]
+
+                for i in tqdm(range(self.N)):
+                    alpha, delta_ij= multiple_results[i].get()
+                    self.alphas.append(alpha)
+                    self.alignements.append(delta_ij)
+
             self.siblings_atoms = [ [np.zeros(len(X[i])) if self.alphas[i][k] == 0 else self.alignements[i][k]@self.D[k] for k in range(self.K)] for i in range(self.N)]
             self.alphas = np.vstack(self.alphas)
             #print(self.alphas.shape)
 
             # Compute error
             E = np.sum([ np.linalg.norm(X[i] - np.sum([self.alphas[i][j] * self.siblings_atoms[i][j] for j in np.arange(self.K)])) for i in range(self.N)])
+            
+            print(f"iteration number : {n_iter}, eps : {abs(np.linalg.norm(E)):.2e}, delta_eps : {abs(np.linalg.norm(E) - np.linalg.norm(E_old)):.2e}")
             #print(E.shape)
             print("     Step 2 | Update Dictionnary")
             # Update dictionnary
@@ -166,14 +174,13 @@ class TWI_kSVD():
                 if sum(Omega_k) >= 2 :
                     u, s, vh = np.linalg.svd(np.vstack(rotated_residuals).T, full_matrices=True)
                     
-                    #  Update values 
-                    self.D[k] = u[0] 
-                    
                     for index, i in  enumerate(Omega_k.nonzero()[0]):
                         inv_rot_u = self.alignements[i][k]@self.rotation(u[0], self.D[k],self.alignements[i][k].T@ self.siblings_atoms[i][k])
                         self.siblings_atoms[i][k] = inv_rot_u
                         self.alphas[i,k] = np.dot(residuals[index], inv_rot_u)/np.linalg.norm(inv_rot_u)
-                
+
+                    #  Update values 
+                    self.D[k] = u[0] 
 
             
             
