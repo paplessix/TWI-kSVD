@@ -81,11 +81,13 @@ def COSTW(x, y, r_window = None):
         if flags[i,j] == 0:
             i, j = i-1, j-1
         elif flags[i,j] == 1:
-            delta[i,j] = 0
+            # delta[i,j] = 0
             j = j-1
         else:
             i = i-1
         delta[i, j] = 1
     
-    return costw, delta
+    row_sums = delta.sum(axis=1)
+    delta_norm = delta / row_sums[:, np.newaxis]
+    return costw, delta_norm
 
