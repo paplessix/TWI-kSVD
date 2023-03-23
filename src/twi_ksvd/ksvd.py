@@ -92,14 +92,14 @@ class TWI_kSVD():
         """Method that implement the rotation of vectors
 
         Args:
-            a (np.array): _description_
-            b (np.array): _description_
-            c (np.array): _description_
+            a (np.array): vector to be rotated
+            b (np.array): reference input vector
+            c (np.array): reference output
 
         Returns:
-            np.array: Rotated vector
+            aR (np.array): Rotated vector such that (ar, c) = (a, b) 
         """
-        theta =  np.arccos(np.clip(np.dot(b/np.linalg.norm(b), c/np.linalg.norm(c)), -1.0, 1.0))
+        theta =  np.arccos(np.dot(b/np.linalg.norm(b), c/np.linalg.norm(c))) # np.arccos(np.clip(np.dot(b/np.linalg.norm(b), c/np.linalg.norm(c)), -1.0, 1.0))
         u = b / np.linalg.norm(b)
         v = (c- np.dot(u,c)*u)/np.linalg.norm((c- np.dot(u,c)*u))
         c, s = np.cos(theta), np.sin(theta)
@@ -149,9 +149,9 @@ class TWI_kSVD():
             #print(self.alphas.shape)
 
             # Compute error
-            E = np.sum([ np.linalg.norm(X[i] - np.sum([self.alphas[i][j] * self.siblings_atoms[i][j] for j in np.arange(self.K)])) for i in range(self.N)])
+            E = np.sum([ np.linalg.norm(X[i] - np.sum([self.alphas[i][j] * self.siblings_atoms[i][j] for j in np.arange(self.K) if self.alphas[i][j] != 0])) for i in range(self.N)])
             
-            print(f"iteration number : {n_iter}, eps : {abs(np.linalg.norm(E)):.2e}, delta_eps : {abs(np.linalg.norm(E) - np.linalg.norm(E_old)):.2e}")
+            print(f"iteration number : {n_iter}, eps : {abs(np.linalg.norm(E)):.2e}, delta_eps : {abs(np.linalg.norm(E) - np.linalg.norm(E_old)):.2e}\n")
             #print(E.shape)
             print("     Step 2 | Update Dictionnary")
             # Update dictionnary
@@ -162,30 +162,34 @@ class TWI_kSVD():
 
                 #print(Omega_k)
 
-                rotated_residuals= []
+                Ek_phi= []
                 residuals = []
                 # print(Omega_k.nonzero()[0])
                 for i in Omega_k.nonzero()[0]:
-                        e_i = X[i] - np.sum([self.alphas[i][j] * self.siblings_atoms[i][j] for j in np.arange(self.K)[mask]])
-                        residuals.append(e_i)
-                        rotated_res = self.rotation(self.alignements[i][k].T@e_i, self.alignements[i][k].T@self.siblings_atoms[i][k], self.D[k])
-                        # print(rotated_res.shape)
-                        rotated_residuals.append(rotated_res)
+                    # Residuals w/o sibling atom k
+                    e_i = X[i] - np.sum([self.alphas[i][j] * self.siblings_atoms[i][j] for j in np.arange(self.K)[mask] if self.alphas[i][j] != 0])
+                    residuals.append(e_i)
+
+                    # Rotated residual w.r.t. sibling atom d_k^si and d_k
+                    phi_ei = self.rotation(self.alignements[i][k].T@e_i, self.alignements[i][k].T@ self.siblings_atoms[i][k], self.D[k])
+                    Ek_phi.append(phi_ei)
+
                 if sum(Omega_k) >= 2 :
-                    u, s, vh = np.linalg.svd(np.vstack(rotated_residuals).T, full_matrices=True)
-                    
-                    for index, i in  enumerate(Omega_k.nonzero()[0]):
-                        inv_rot_u = self.alignements[i][k]@self.rotation(u[0], self.D[k],self.alignements[i][k].T@ self.siblings_atoms[i][k])
-                        self.siblings_atoms[i][k] = inv_rot_u
-                        self.alphas[i,k] = np.dot(residuals[index], inv_rot_u)/np.linalg.norm(inv_rot_u)
+                    u, _, _ = np.linalg.svd(np.vstack(Ek_phi).T, full_matrices=True)
+                    u1 = u[0]
+                elif sum(Omega_k) == 1:
+                    u1 = Ek_phi[0] / np.linalg.norm(Ek_phi[0])
+                else:
+                    continue
 
-                    #  Update values 
-                    self.D[k] = u[0] 
+                for index, i in  enumerate(Omega_k.nonzero()[0]):
+                    inv_rot_u = self.alignements[i][k]@self.rotation(u1, self.D[k],self.alignements[i][k].T@ self.siblings_atoms[i][k])
+                    self.siblings_atoms[i][k] = inv_rot_u
+                    self.alphas[i,k] = np.dot(residuals[index], inv_rot_u)/np.linalg.norm(inv_rot_u)
 
-            
-            
+                #  Update values 
+                self.D[k] = u1
 
-            
             if n_iter > self.max_iter :
                 print(f"Maximum number of iteration reached : {self.max_iter}")
                 break
