@@ -1,5 +1,6 @@
 from math import sqrt
 from numpy import zeros, array
+import numpy as np
 
 
 def COSTW(x, y, r_window = None):
@@ -13,11 +14,13 @@ def COSTW(x, y, r_window = None):
         -`costw`: Cosine maximisation time warp value
         -`delta`: alignement
     """
-    Tx = x.shape[0]
-    Ty = y.shape[0]
+
+    Tx = x.shape[0] # Length of X
+    Ty = y.shape[0] # Length of y
 
     def f(M_t):
         return M_t[0] / (sqrt(M_t[1] * M_t[2]) + 1e-6)
+
 
     if r_window is None:
         def inWindow(i,j):
@@ -27,51 +30,46 @@ def COSTW(x, y, r_window = None):
             return abs(j * Tx / Ty - i) <= r_window
     
 
-    M = zeros((Tx, Ty, 3))
-    flags = zeros((Tx, Ty), dtype=int)
+    M = zeros((Tx, Ty, 3)) # Initialize matrix M 
 
-    M[0,0,0] = x[0]*y[0]
-    M[0,0,1] = x[0]**2
-    M[0,0,2] = y[0]**2
 
-    for i in range(1, Tx):
-        if inWindow(i, 0):
-            values = array([x[i]*y[0], x[i]**2, y[0]**2])
-            M[i, 0] = M[i-1, 1] + values
-            flags[i, 0] = -1
-    
-    for j in range(1, Ty):
-        if inWindow(0, j):
-            values = array([x[0]*y[j], x[0]**2, y[j]**2])
-            M[0, j] = M[1, j-1] + values
-            flags[0, j] = 1
-    
-    for j in range(1, Ty):
-        for i in range(1, Tx):
-            if inWindow(i,j):
-                values = array([x[i]*y[j], x[i]**2, y[j]**2])
+    flags = zeros((Tx, Ty), dtype=int) # TODO : Checl 
+    flags_list = [-1,1,0] #CF. array([M[i-1,j]+values, M[i,j-1]+values,M[i-1,j-1]+values])
 
-                if inWindow(i-1, j-1):
-                    M[i, j] = M[i-1, j-1] + values
-                    best_f = f(M[i,j])
-                    flags[i, j]  = 0
-                else:
-                    best_f = -2.
+    # iterating this way ensures that we have computed the 
+    # (maximum of 3) predecessor values
+    for c in range(Tx + Ty-1): # Longueur de la diagonale
+        # i is bounded by c
+        for i in range(c+1):
+            # then j is deduced from c and i
+            j = c - i
+            # clip within the cost matrix domain
+            if 0 <= i < Tx and 0 <= j < Ty and inWindow(i,j):
+                if i == 0 and j == 0:  # upper left corner
+                    M[i,j] = array([x[0]*y[0],x[0]**2,y[0]**2])
+                    flags[i, j] = 0
 
-                if inWindow(i, j-1):
-                    test_f = f(M[i, j-1] + values)
-                    if test_f > best_f:
-                        M[i, j] = M[i, j-1] + values
-                        best_f = test_f
-                        flags[i, j]  = 1
-                
-                if inWindow(i-1, j):
-                    test_f = f(M[i-1, j] + values)
-                    if  test_f > best_f:
-                        M[i, j] = M[i-1, j] + values
-                        best_f = test_f
-                        flags[i, j]  = -1
+                elif j == 0:           # on one edge, only one insertion
+                    values = array([x[i]*y[j], x[i]**2, y[j]**2])
+                    M[i, j] = M[i-1, j] + values
+                    flags[i, j] = -1
+                    
 
+                elif i == 0:           # the other edge, ditto
+                    values = array([x[i]*y[j], x[i]**2, y[j]**2])
+                    M[i, j] = M[i, j-1] + values
+                    flags[i, j] = 1
+
+                else:                  # in the middle
+                    values = array([x[i]*y[j], x[i]**2, y[j]**2])
+
+                    new_values = array([M[i-1,j]+values, M[i,j-1]+values,M[i-1,j-1]+values])
+                    is_inwindow = [inWindow(k,l) for (k,l) in [(i-1,j),(i,j-1),(i-1,j-1)]]
+                    idx = np.argmax([f(m) if in_wind else -np.inf for m, in_wind in zip(new_values, is_inwindow) ])
+
+                    # Assign values
+                    M[i,j] = new_values[idx]
+                    flags[i, j] = flags_list[idx]
     
     costw = f(M[-1, -1])
     delta = zeros((Tx, Ty), dtype=int)
@@ -90,3 +88,4 @@ def COSTW(x, y, r_window = None):
         delta[i, j] = 1
     
     return costw, delta
+
