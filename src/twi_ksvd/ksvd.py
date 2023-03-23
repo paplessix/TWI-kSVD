@@ -60,7 +60,7 @@ class kSVD():
                     u, s, vh = np.linalg.svd(E_k_restricted, full_matrices=True)
                     #  Update values 
 
-                    self.D[:,k] = u[0] 
+                    self.D[:,k] = u[:,0] 
                     self.A[k,Omega_k] = s[0]*vh[0]
             if n_iter > self.max_iter :
                 print(f"Maximum number of iteration reached : {self.max_iter}")
