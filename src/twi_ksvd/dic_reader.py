@@ -13,40 +13,44 @@ class LetterClassifier():
         self.selected_letters = None
     
     @property
-    def letters(self) -> list:
+    def letters(self) -> list: # list of letters in the dictionnary
         return list(self.x_dico.keys())
 
     @property
-    def concatenated_x_dico(self) -> list:
+    def concatenated_x_dico(self) -> list: # concatenation of all x_dico atoms
         return [atom for letter, atoms in self.x_dico.items() for atom in atoms if letter in self.selected_letters]   
 
     @property
-    def concatenated_y_dico(self) -> list:
+    def concatenated_y_dico(self) -> list: # concatetnation of all y_dico atoms
         return [atom for letter,atoms in self.y_dico.items() for atom in atoms if letter in self.selected_letters]
     
     @property
-    def count_atoms_x_dico(self) -> int:
+    def count_atoms_x_dico(self) -> int: # number of atoms in x_dico per letter
         return {letter : len(atoms) for letter, atoms in self.x_dico.items() if letter in self.selected_letters}
     
     @property
-    def count_atoms_y_dico(self) -> int: 
+    def count_atoms_y_dico(self) -> int:  # number of atoms in y_dico per letter
         return {letter : len(atoms) for letter, atoms in self.y_dico.items() if letter in self.selected_letters}
     
     @property
-    def map_letter_to_atoms_x_dico(self) -> dict:
+    def map_letter_to_atoms_x_dico(self) -> dict: #letter corresponding to the atom in concatenated_x_dico
         result = []
         for letter, numbr in self.count_atoms_x_dico.items():
             result += [letter] * numbr
         return result
     
     @property
-    def map_letter_to_atoms_y_dico(self) -> dict:
+    def map_letter_to_atoms_y_dico(self) -> dict: # letter corresponding to the atom in concatenated_y_dico
         result = []
         for letter, numbr in self.count_atoms_y_dico.items():
             result += [letter] * numbr
         return result 
 
     def load_data(self, folder_path: str) -> None:
+        """Function to load data from folder_path
+        Args:
+            folder_path (str): folder containing all atoms
+        """
         dirs = os.listdir( folder_path )
 
         for folder in dirs:
@@ -69,6 +73,17 @@ class LetterClassifier():
             self.y_dico[folder]= dic_y
 
     def fit (self, signal_x, signal_y, tau, r_window = None) -> None:
+        """Function that compute sparse representation of two signals using dictionnaries over x an y
+
+        Args:
+            signal_x (_type_): a signal over x axis
+            signal_y (_type_): a signal over y axis
+            tau (_type_): number of atoms for sparse representation
+            r_window (_type_, optional): Sakoe Chiba band width. Defaults to None.
+
+        Returns:
+            tuple: alphas_x, deltas_x, alphas_y, deltas_y coefficients and time warp matrix over axis x and y
+        """
         
         alphas_x, deltas_x = TWI_OMP(signal_x, self.concatenated_x_dico, tau=tau, r_window=r_window)
         alphas_y, deltas_y = TWI_OMP(signal_y, self.concatenated_y_dico, tau=tau, r_window=r_window)
@@ -78,17 +93,30 @@ class LetterClassifier():
     
 
     def classify(self, signal_x, signal_y, tau, r_window = None, plot = False )-> None:
+        """Function that assign to two signals the closest letter in the dictionnary leanred
+
+        Args:
+            signal_x (_type_):  a signal over x axis
+            signal_y (_type_): a signal over y axis
+            tau (_type_): number of atoms for sparse representation
+            r_window (_type_, optional): Sakoe Chiba band width. Defaults to None.
+            plot (bool, optional): Whether or not to plot the out. Defaults to False.
+
+        Returns:
+            _type_: _description_
+        """
 
         alphas_x, deltas_x, alphas_y, deltas_y = self.fit(signal_x, signal_y, tau, r_window)
         results = {}
         for letter, reconstructed_x_signal, reconstructed_y_signal in self.generator_reconstructed_signal_per_letter(alphas_x, deltas_x, alphas_y, deltas_y):
-            res_x, res_y, res_xy = self.metric(signal_x, signal_y, reconstructed_x_signal, reconstructed_y_signal)
-            print(f"letter : {letter} , res_x : {res_x}, res_y : {res_y}, res_xy : {res_xy}")
-            results[letter] = (res_x, res_y, res_xy)
+            res_x, res_y, res_xy, res = self.metric(signal_x, signal_y, reconstructed_x_signal, reconstructed_y_signal)
+            print(f"letter : {letter} , res_x : {res_x}, res_y : {res_y}, res_xy : {res_xy}, res : {res}")
+            results[letter] = (res_x, res_y, res_xy, res)
         return results
 
     
     def reconstruct_signal(self, alphas, deltas, dictionnary):
+
         reconstructed_signal  = None
         for i,(alpha, delta, atom )in enumerate(zip(alphas, deltas,dictionnary)):
             if alpha != 0:
@@ -103,7 +131,8 @@ class LetterClassifier():
         res_x = np.linalg.norm(signal_x - reconstructed_x) 
         res_y = np.linalg.norm(signal_y - reconstructed_y)
         res_xy = np.linalg.norm(signal_x - reconstructed_x) + np.linalg.norm(signal_y - reconstructed_y)
-        return res_x, res_y, res_xy
+        res = np.sum(np.linalg.norm(np.vstack(((signal_x - reconstructed_x),(signal_y- reconstructed_y))), axis = 1))
+        return res_x, res_y, res_xy, res
 
 
     def generator_reconstructed_signal_per_letter(self,alphas_x, deltas_x, alphas_y, deltas_y):
