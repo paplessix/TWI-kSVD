@@ -3,6 +3,8 @@ import numpy as np
 from tqdm import tqdm 
 from twi_ksvd.omp import OMP, TWI_OMP
 
+from multiprocessing import Pool
+
 
 class kSVD():
     """Implementation of the kSVD dictionnary learning algorithm
@@ -48,9 +50,9 @@ class kSVD():
             for k in range(self.K):
                 mask = np.ones(len(self.D[0]), dtype=bool)
                 mask[k] = False
-                # E_k = X - np.einsum('ij,jk->ik',self.D[:,mask], self.A[mask,:]) #TODO: Check if it is really doing what it needs to do 
+                E_k = X - np.einsum('ij,jk->ik',self.D[:,mask], self.A[mask,:]) #TODO: Check if it is really doing what it needs to do 
                 
-                E_k = X - self.D[:,mask]@ self.A[mask,:]
+                # E_k = X - np.sum([np.outer(self.D[:,j],self.A[j,:])for j in np.arange(self.K)[mask]])
                 Omega_k = self.A[k,:] != 0
                 # print(Omega_k.shape)
                 if sum(Omega_k) != 0 :
@@ -58,7 +60,7 @@ class kSVD():
                     u, s, vh = np.linalg.svd(E_k_restricted, full_matrices=True)
                     #  Update values 
 
-                    self.D[:,k] = u[0] 
+                    self.D[:,k] = u[:,0] 
                     self.A[k,Omega_k] = s[0]*vh[0]
             if n_iter > self.max_iter :
                 print(f"Maximum number of iteration reached : {self.max_iter}")
@@ -90,14 +92,14 @@ class TWI_kSVD():
         """Method that implement the rotation of vectors
 
         Args:
-            a (np.array): _description_
-            b (np.array): _description_
-            c (np.array): _description_
+            a (np.array): vector to be rotated
+            b (np.array): reference input vector
+            c (np.array): reference output
 
         Returns:
-            np.array: Rotated vector
+            aR (np.array): Rotated vector such that (ar, c) = (a, b) 
         """
-        theta =  np.arccos(np.clip(np.dot(b/np.linalg.norm(b), c/np.linalg.norm(c)), -1.0, 1.0))
+        theta = np.arccos(np.clip(np.dot(b/np.linalg.norm(b), c/np.linalg.norm(c)), -1.0, 1.0))
         u = b / np.linalg.norm(b)
         v = (c- np.dot(u,c)*u)/np.linalg.norm((c- np.dot(u,c)*u))
         c, s = np.cos(theta), np.sin(theta)
@@ -105,7 +107,7 @@ class TWI_kSVD():
         R = np.eye(len(u)) - np.outer(u,u) - np.outer(v,v) + np.vstack((u,v)).T@R_theta@np.vstack((u,v))
         return R@a
     
-    def fit (self, X, D, tau):
+    def fit (self, X, D, tau, r_window=None):
         """Method that learn the dictionnary using the TWI-kSVD algorihtm
 
         Args:
@@ -117,7 +119,8 @@ class TWI_kSVD():
             _type_: _description_
         """
         self.D = D
-        self.N  = len(X[0]) # number of input samples
+        assert len(D) == self.K
+        self.N  = len(X) # number of input samples
         # Initialize values 
 
         E_old = 0 
@@ -125,7 +128,6 @@ class TWI_kSVD():
         n_iter = 0
         while abs(np.linalg.norm(E) - np.linalg.norm(E_old)) > self.epsilon: # Stopping Criterion
             print("=============================================")
-            print(f"iteration number : {n_iter}, eps : {abs(np.linalg.norm(E))}, delta_eps : {abs(np.linalg.norm(E) - np.linalg.norm(E_old))}")
             E_old = E  
             # init
             self.alphas = []
@@ -133,49 +135,65 @@ class TWI_kSVD():
             print("     Step 1 | Compute Sparse Codes")
             # Compute sparse codes 
 
-            for i in tqdm(range(self.N)):
-                alpha, delta_ij= TWI_OMP(X[:,i],D,tau)
-                self.alphas.append(alpha)
-                self.alignements.append(delta_ij)
-            self.siblings_atoms = [ [self.alignements[i][k]@self.D[k,:] for k in range(self.K)] for i in range(self.N)]
-            self.alphas = np.vstack(self.alphas).T
-            # print(self.alphas.shape)
+            # print("Launching async processes")
+            with Pool(processes=None) as pool:
+                multiple_results = [pool.apply_async(TWI_OMP, (X[i],D,tau, r_window)) for i in range(self.N)]
+
+                for i in tqdm(range(self.N)):
+                    alpha, delta_ij= multiple_results[i].get()
+                    self.alphas.append(alpha)
+                    self.alignements.append(delta_ij)
+
+            self.siblings_atoms = [ [np.zeros(len(X[i])) if self.alphas[i][k] == 0 else self.alignements[i][k]@self.D[k] for k in range(self.K)] for i in range(self.N)]
+            self.alphas = np.vstack(self.alphas)
+            #print(self.alphas.shape)
 
             # Compute error
-            E = np.array([ X[:,i] - np.sum([self.alignements[i][j]@self.D[j,:]*self.alphas[j,i] for j in np.arange(self.K)]) for i in range(self.N)])
-            print(E.shape)
+            E = np.sum([ np.linalg.norm(X[i] - np.sum([self.alphas[i][j] * self.siblings_atoms[i][j] for j in np.arange(self.K) if self.alphas[i][j] != 0], axis=0)) for i in range(self.N)])
+            
+            print(f"iteration number : {n_iter}, eps : {abs(np.linalg.norm(E)):.2e}, delta_eps : {abs(np.linalg.norm(E) - np.linalg.norm(E_old)):.2e}\n")
+            #print(E.shape)
             print("     Step 2 | Update Dictionnary")
             # Update dictionnary
             for k in range(self.K):
                 mask = np.ones(self.K, dtype=bool)
                 mask[k] = False
-                Omega_k = self.alphas[k,:] != 0
+                Omega_k = self.alphas[:,k] != 0
 
-                rotated_residuals= []
+                #print(Omega_k)
+
+                Ek_phi= []
                 residuals = []
                 # print(Omega_k.nonzero()[0])
                 for i in Omega_k.nonzero()[0]:
-                        e_i = X[:,i] - np.sum([self.alignements[i][j]@self.D[j,:]*self.alphas[j,i] for j in np.arange(self.K)[mask]])
-                        residuals.append(e_i)
-                        rotated_res = self.rotation(self.alignements[i][k].T@e_i, self.alignements[i][k].T@self.siblings_atoms[i][k], self.D[k,:])
-                        # print(rotated_res.shape)
-                        rotated_residuals.append(rotated_res)
+                    # Residuals w/o sibling atom k
+                    reconstruction = np.sum([self.alphas[i][j] * self.siblings_atoms[i][j] for j in np.arange(self.K)[mask] if self.alphas[i][j] != 0], axis=0)
+                    assert X[i].shape == reconstruction.shape, f"Reconstruction shape error {X[i].shape} != {reconstruction.shape}"
+                    e_i = X[i] - reconstruction
+                    residuals.append(e_i)
+
+                    # Rotated residual w.r.t. sibling atom d_k^si and d_k
+                    phi_ei = self.rotation(self.alignements[i][k].T@e_i, self.alignements[i][k].T@ self.siblings_atoms[i][k], self.D[k])
+                    Ek_phi.append(phi_ei)
+
                 if sum(Omega_k) >= 2 :
-                    u, s, vh = np.linalg.svd(np.vstack(rotated_residuals).T, full_matrices=True)
-                    
-                    #  Update values 
-                    self.D[k,:] = u[0] 
-                    
-                    for index, i in  enumerate(Omega_k.nonzero()[0]):
-                        inv_rot_u = self.alignements[i][k]@self.rotation(u[0], self.D[k,:],self.alignements[i][k].T@ self.siblings_atoms[i][k])
-                        self.siblings_atoms[i][k] = inv_rot_u
-                        self.alphas[k,i] = np.dot(residuals[index], inv_rot_u)/np.linalg.norm(inv_rot_u)
-                
+                    u, _, _ = np.linalg.svd(np.vstack(Ek_phi).T, full_matrices=True)
+                    u1 = u[:,0]
+                elif sum(Omega_k) == 1:
+                    u1 = Ek_phi[0] / np.linalg.norm(Ek_phi[0])
+                else:
+                    continue
+            
+                assert u1.shape == self.D[k].shape, f"New atom with different length {u1.shape} != {self.D[k].shape}"
 
-            
-            
+                for index, i in  enumerate(Omega_k.nonzero()[0]):
+                    inv_rot_u = self.alignements[i][k]@self.rotation(u1, self.D[k],self.alignements[i][k].T@ self.siblings_atoms[i][k])
+                    self.siblings_atoms[i][k] = inv_rot_u
+                    self.alphas[i,k] = np.dot(residuals[index], inv_rot_u)/np.linalg.norm(inv_rot_u)
 
-            
+                #  Update values 
+                self.D[k] = u1
+
             if n_iter > self.max_iter :
                 print(f"Maximum number of iteration reached : {self.max_iter}")
                 break
@@ -183,11 +201,14 @@ class TWI_kSVD():
                 n_iter +=1
         return self.alphas, self.D
     
+    def reconstruct_fit(self):
+        return np.array([np.sum([self.alignements[i][j]@self.D[j]*self.alphas[i,j] for j in np.arange(self.K)]) for i in range(self.N)])
+    
 
 if __name__ == '__main__':
     model = TWI_kSVD( 10)
-    X = np.random.random((2048,4))
-    D = np.random.random((2048,10)).T
+    X = np.random.random((100,4))
+    D = np.random.random((100,10)).T
     tau = 3
     model. fit(X,D,tau )
     print("tip")

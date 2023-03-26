@@ -1,8 +1,9 @@
 from math import sqrt
-from numpy import zeros
+from numpy import zeros, array
+import numpy as np
 
 
-def COSTW(x, y):
+def COSTW(x, y, r_window = None):
     """
     Cosine maximisation time warp (COSTW)
 
@@ -14,65 +15,63 @@ def COSTW(x, y):
         -`delta`: alignement
     """
 
-    def f(x_dot_y, norm_x_2, norm_y_2):
-        return x_dot_y / sqrt(norm_x_2 * norm_y_2)
+    Tx = x.shape[0] # Length of X
+    Ty = y.shape[0] # Length of y
+
+    def f(M_t):
+        return M_t[0] / (sqrt(M_t[1] * M_t[2]) + 1e-6)
+
+
+    if r_window is None:
+        def inWindow(i,j):
+            return True
+    else:
+        def inWindow(i,j):
+            return abs(j * Tx / Ty - i) <= r_window
     
-    Tx = x.shape[0]
-    Ty = y.shape[0]
 
-    M = zeros((Tx, Ty))
-    N = zeros((Tx, Ty))
-    P = zeros((Tx, Ty))
-    flags = zeros((Tx, Ty), dtype=int)
+    M = zeros((Tx, Ty, 3)) # Initialize matrix M 
 
-    M[0,0] = x[0]*y[0]
-    N[0,0] = x[0]**2
-    P[0,0] = y[0]**2
 
-    for i in range(1, Tx):
-        M[i, 0] = M[i-1, 1] + x[i]*y[0]
-        N[i, 0] = N[i-1, 1] + x[i]**2
-        P[i, 0] = P[i-1, 1] + y[0]**2
-        flags[i, 0] = -1
+    flags = zeros((Tx, Ty), dtype=int) # TODO : Checl 
+    flags_list = [-1,1,0] #CF. array([M[i-1,j]+values, M[i,j-1]+values,M[i-1,j-1]+values])
+
+    # iterating this way ensures that we have computed the 
+    # (maximum of 3) predecessor values
+    for c in range(Tx + Ty-1): # Longueur de la diagonale
+        # i is bounded by c
+        for i in range(c+1):
+            # then j is deduced from c and i
+            j = c - i
+            # clip within the cost matrix domain
+            if 0 <= i < Tx and 0 <= j < Ty and inWindow(i,j):
+                if i == 0 and j == 0:  # upper left corner
+                    M[i,j] = array([x[0]*y[0],x[0]**2,y[0]**2])
+                    flags[i, j] = 0
+
+                elif j == 0:           # on one edge, only one insertion
+                    values = array([x[i]*y[j], x[i]**2, y[j]**2])
+                    M[i, j] = M[i-1, j] + values
+                    flags[i, j] = -1
+                    
+
+                elif i == 0:           # the other edge, ditto
+                    values = array([x[i]*y[j], x[i]**2, y[j]**2])
+                    M[i, j] = M[i, j-1] + values
+                    flags[i, j] = 1
+
+                else:                  # in the middle
+                    values = array([x[i]*y[j], x[i]**2, y[j]**2])
+
+                    new_values = array([M[i-1,j]+values, M[i,j-1]+values,M[i-1,j-1]+values])
+                    is_inwindow = [inWindow(k,l) for (k,l) in [(i-1,j),(i,j-1),(i-1,j-1)]]
+                    idx = np.argmax([f(m) if in_wind else -np.inf for m, in_wind in zip(new_values, is_inwindow) ])
+
+                    # Assign values
+                    M[i,j] = new_values[idx]
+                    flags[i, j] = flags_list[idx]
     
-    for j in range(1, Ty):
-        M[0, j] = M[1, j-1] + x[0]*y[j]
-        N[0, j] = N[1, j-1] + x[0]**2
-        P[0, j] = P[1, j-1] + y[j]**2
-        flags[0, j] = 1
-    
-    for j in range(1, Ty):
-        for i in range(1, Tx):
-            xiyj = x[i]*y[j]
-            xi2 = x[i]**2
-            yj2 = y[j]**2
-
-            best_M = M[i-1, j-1] + xiyj
-            best_N = N[i-1, j-1] + xi2
-            best_P = P[i-1, j-1] + yj2
-            best_f = f(best_M, best_N, best_P)
-            best_flag = 0
-
-            if f(M[i, j-1] + xiyj, N[i, j-1] + xi2, P[i, j-1] + yj2) > best_f:
-                best_M = M[i, j-1] + xiyj
-                best_N = N[i, j-1] + xi2
-                best_P = P[i, j-1] + yj2
-                best_f = f(best_M, best_N, best_P)
-                best_flag = 1
-            
-            if f(M[i-1, j] + xiyj, N[i-1, j] + xi2, P[i-1, j] + yj2) > best_f:
-                best_M = M[i-1, j] + xiyj
-                best_N = N[i-1, j] + xi2
-                best_P = P[i-1, j] + yj2
-                best_f = f(best_M, best_N, best_P)
-                best_flag = -1
-
-            M[i, j] = best_M
-            N[i, j] = best_N
-            P[i, j] = best_P
-            flags[i, j] = best_flag
-    
-    costw = M[-1, -1]
+    costw = f(M[-1, -1])
     delta = zeros((Tx, Ty), dtype=int)
     delta[-1, -1] = 1
 
@@ -88,4 +87,7 @@ def COSTW(x, y):
             i = i-1
         delta[i, j] = 1
     
-    return costw, delta
+    # row_sums = delta.sum(axis=1)
+    delta_norm = delta #/ row_sums[:, np.newaxis]
+    return costw, delta_norm
+
