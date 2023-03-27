@@ -167,7 +167,7 @@ class TWI_kSVD():
                 # print(Omega_k.nonzero()[0])
                 for i in Omega_k.nonzero()[0]:
                     # Residuals w/o sibling atom k
-                    reconstruction = np.sum([self.alphas[i][j] * self.siblings_atoms[i][j] for j in np.arange(self.K)[mask] if self.alphas[i][j] != 0], axis=0)
+                    reconstruction = np.sum([np.zeros_like(X[i])] + [self.alphas[i][j] * self.siblings_atoms[i][j] for j in np.arange(self.K)[mask] if self.alphas[i][j] != 0], axis=0)
                     assert X[i].shape == reconstruction.shape, f"Reconstruction shape error {X[i].shape} != {reconstruction.shape}"
                     e_i = X[i] - reconstruction
                     residuals.append(e_i)
@@ -177,7 +177,7 @@ class TWI_kSVD():
                     Ek_phi.append(phi_ei)
 
                 if sum(Omega_k) >= 2 :
-                    u, _, _ = np.linalg.svd(np.vstack(Ek_phi).T, full_matrices=True)
+                    u, _, _ = np.linalg.svd(np.vstack(Ek_phi).T, full_matrices=False)
                     u1 = u[:,0]
                 elif sum(Omega_k) == 1:
                     u1 = Ek_phi[0] / np.linalg.norm(Ek_phi[0])
