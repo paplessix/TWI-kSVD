@@ -1,5 +1,5 @@
-from numpy import argmax, dot, stack, zeros
-from numpy.linalg import norm, lstsq, inv
+from numpy import argmax, dot, stack, zeros, clip, isnan
+from numpy.linalg import norm, lstsq, inv, pinv
 from twi_ksvd.costw import COSTW
 
 
@@ -23,27 +23,24 @@ def OMP(x, D, tau):
     D_Omega = []
 
     while len(Omega) < tau:
-        best_cos = -1
-        best_k = -1
-        best_dk = -1.
 
+        storage = []
         for j in range(K):
-            if j in Omega:
-                continue
-            cos_sim = dot(res, D[:,j].T)/(norm(res)*norm(D[:,j].T))
-            if cos_sim > best_cos:
-                best_cos = cos_sim
-                best_k = j
-                best_dk = D[:,j]
+            if j in Omega :
+                storage.append(-10)
+            else :
+                storage.append(clip(dot(res, D[:,j])/(norm(res)*norm(D[:,j])),-1,1))
+
+        i_max = argmax(storage)
         
-        Omega.append(best_k)
-        D_Omega.append(best_dk)
 
-        D_partial = stack(D_Omega, axis=-1)
+        Omega.append(i_max)
+        Omega = sorted(Omega)
+        D_partial = D[:,Omega]
 
-        alpha_partial = lstsq(D_partial, x)[0]
+        alpha_partial = pinv(D_partial.T @ D_partial) @ D_partial.T @ x
 
-        res = x - D_partial.reshape((p, len(Omega))) @ alpha_partial
+        res = x - D_partial@ alpha_partial
 
     alpha = zeros(K)
 

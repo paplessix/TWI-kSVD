@@ -40,7 +40,7 @@ class kSVD():
             print("Compute Sparse Codes")
             # Compute sparse codes 
 
-            for i in range(self.N):
+            for i in tqdm(range(self.N)):
                 alphas.append(OMP(X[:,i],D,tau))
             self.A = np.vstack(alphas).T
 
