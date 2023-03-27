@@ -2,6 +2,7 @@ from math import sqrt
 from numpy import zeros, array
 import numpy as np
 
+from pyts.metrics import sakoe_chiba_band
 
 def COSTW(x, y, r_window = None):
     """
@@ -21,14 +22,16 @@ def COSTW(x, y, r_window = None):
     def f(M_t):
         return M_t[0] / (sqrt(M_t[1] * M_t[2]) + 1e-6)
 
-
     if r_window is None:
-        def inWindow(i,j):
-            return True
-    else:
-        def inWindow(i,j):
-            return abs(j * Tx / Ty - i) <= r_window
-    
+        r_window = 1.
+    region = sakoe_chiba_band(Tx, Ty, r_window)
+
+    mask = np.zeros((Tx, Ty), dtype=bool)
+    for i, (j, k) in enumerate(region.T):
+        mask[j:k, i] = 1.
+
+    def inWindow(i,j):
+        return mask[i,j]
 
     M = zeros((Tx, Ty, 3)) # Initialize matrix M 
 
