@@ -28,7 +28,7 @@ def COSTW(x, y, r_window = None):
 
     mask = np.zeros((Tx, Ty), dtype=bool)
     for i, (j, k) in enumerate(region.T):
-        mask[j:k, i] = 1.
+        mask[i, j:k] = 1.
 
     def inWindow(i,j):
         return mask[i,j]
